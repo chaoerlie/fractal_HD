@@ -1,0 +1,39 @@
+# 忽略日志文件
+*.log
+
+# 忽略数据集目录
+/data/
+/train/
+
+# Python 缓存与构建
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE 配置
+.vscode/
+.idea/
+
+# 模型权重和中间结果
+*.pth
+*.pt
+*.ckpt
+checkpoints/
+output_dir/
+samples/
+generated/
+*.png
+*.jpg
+*.jpeg
+
+# 训练记录
+runs/
+events.out.tfevents.*
+
+# 环境文件
+.env
+.venv/
+env/
