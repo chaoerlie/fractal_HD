@@ -63,6 +63,7 @@ For convenience, our pre-trained models can be downloaded directly here as well:
 
 ## Usage
 
+
 ### Demo
 Run our interactive visualization [demo](http://colab.research.google.com/github/LTH14/fractalgen/blob/main/demo/run_fractalgen.ipynb) using Colab notebook!
 
