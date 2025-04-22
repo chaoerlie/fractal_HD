@@ -4,7 +4,7 @@
 # 忽略数据集目录
 /data/
 /train/
-
+/src/
 # Python 缓存与构建
 __pycache__/
 *.py[cod]
