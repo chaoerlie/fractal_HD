@@ -17,7 +17,8 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
 from models import fractalgen
 from engine_fractalgen import train_one_epoch, compute_nll, evaluate
-
+from util.mmds import MMDS
+from resnet.train import MultiScaleResNet152
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Fractal Generative Models', add_help=False)
@@ -116,8 +117,28 @@ def get_args_parser():
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='URL used to set up distributed training')
+    
+    # HD Loss parameters
+    parser.add_argument('--hd_model', default=None, type=str,
+                        help='Path to the pre-trained Hausdorff dimension prediction model.')
+    parser.add_argument('--standard_hd_value', default=None, type=float,
+                        help='The single target Hausdorff dimension value.')
+    parser.add_argument('--hd_weight_schedule', default=None, type=str,
+                        help='Schedule for HD loss weight. Format: "type:start_val:end_val". '
+                             'E.g., "linear:0.1:0" for linear decay, or a path to a .txt file with weights per line.')
+    # MMDS是一个参数，true表示使用，false表示不使用
+    parser.add_argument('--mmds',  action='store_true', help='Use MMD loss')
 
     return parser
+
+
+def load_hd_model(model_path, device):
+    """加载预训练的豪斯多夫维数预测模型"""
+    hd_model = MultiScaleResNet152()
+    hd_model.load_state_dict(torch.load(model_path, map_location='cpu'))
+    hd_model.to(device)
+    hd_model.eval()
+    return hd_model
 
 
 def main(args):
@@ -218,7 +239,7 @@ def main(args):
     # Resume from checkpoint if provided
     checkpoint_path = os.path.join(args.resume, "checkpoint-last.pth") if args.resume else None
     if checkpoint_path and os.path.exists(checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        checkpoint = torch.load(checkpoint_path, map_location='cpu',weights_only= False)
         model_without_ddp.load_state_dict(checkpoint['model'])
         print("Resumed checkpoint from", args.resume)
 
@@ -232,6 +253,40 @@ def main(args):
     else:
         print("Training from scratch")
 
+    # --- HD Loss Setup ---
+    hd_model = None
+    standard_hd_value = None
+    hd_weight_list = None
+
+    if args.hd_model and args.standard_hd_value is not None and args.hd_weight_schedule:
+        print("--- Setting up HD Loss ---")
+        # 1. 加载HD模型
+        # hd_model = load_hd_model(args.hd_model_path, device)
+        # print(f"Loaded HD model from: {args.hd_model_path}")
+        hd_model = args.hd_model
+
+
+        # 2. 设置目标HD值
+        standard_hd_value = args.standard_hd_value
+        print(f"Target Standard HD value: {standard_hd_value}")
+
+        # 3. 创建HD权重列表
+        if os.path.exists(args.hd_weight_schedule) and args.hd_weight_schedule.endswith('.txt'):
+            # 从txt文件加载权重列表
+            with open(args.hd_weight_schedule, 'r') as f:
+                hd_weight_list = [float(line.strip()) for line in f.readlines()]
+            print(f"Loaded HD weight list from file: {args.hd_weight_schedule}")
+        else:
+            # 根据衰减策略生成权重列表
+            schedule_parts = args.hd_weight_schedule.split(':')
+            if len(schedule_parts) == 3 and schedule_parts[0] == 'linear':
+                start_w, end_w = float(schedule_parts[1]), float(schedule_parts[2])
+                hd_weight_list = np.linspace(start_w, end_w, args.epochs).tolist()
+                print(f"HD weight schedule: Linear decay from {start_w} to {end_w} over {args.epochs} epochs.")
+            else:
+                raise ValueError(f"Invalid hd_weight_schedule format: {args.hd_weight_schedule}. "
+                                 "Expected 'linear:start:end' or a path to a .txt file.")
+
     # Evaluation modes
     if args.evaluate_gen:
         torch.cuda.empty_cache()
@@ -242,6 +297,14 @@ def main(args):
         torch.cuda.empty_cache()
         compute_nll(model, data_loader_val, device, N=args.nll_forward_number)
         return
+    mmds = None
+    if args.mmds:
+        mmds = MMDS(initial_lambda=0.0,momentum=0.9,gamma=1.0)
+
+    hd_model_instance = None
+    if getattr(args, "hd_model", None):
+        # 只加载一次到 device（建议在 main 中加载并传入）
+        hd_model_instance = load_hd_model(args.hd_model, device)
 
     # Training loop
     print(f"Start training for {args.epochs} epochs")
@@ -250,9 +313,32 @@ def main(args):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
 
-        train_one_epoch(
-            model, data_loader_train, optimizer, device, epoch, loss_scaler, log_writer=log_writer, args=args
+        train_stats = train_one_epoch(
+            model,
+            data_loader_train,
+            optimizer,
+            device,
+            epoch,
+            loss_scaler,
+            log_writer=log_writer,
+            args=args,
+            # 传递 hd_model 和 standard_hd_values
+            hd_model=hd_model_instance,
+            standard_hd_values=standard_hd_value,
+            hd_weight_list=hd_weight_list,
+            mmds = mmds
         )
+
+        # 每 epoch 使用该 epoch 的平均 train_loss 和 average hd_loss 来更新 MMDS
+        if mmds is not None:
+            avg_train_loss = float(train_stats.get('loss', 0.0))
+            avg_hd_loss = float(train_stats.get('hd_loss', 0.0))
+            # 当前 lambda（用于组成 L_total）
+            current_lambda = mmds.get_lambda()
+            # L_total = L_gen + lambda * L_HD
+            L_total = avg_train_loss + current_lambda * avg_hd_loss
+            mmds.update_lambda(L_total)
+            print(f"MMDS updated after epoch {epoch}: L_gen={avg_train_loss:.6f}, L_hd={avg_hd_loss:.6f}, new_lambda={mmds.get_lambda():.6f}")
 
         # Save checkpoint periodically
         if epoch % args.save_last_freq == 0 or epoch + 1 == args.epochs:

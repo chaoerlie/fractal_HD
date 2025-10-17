@@ -209,3 +209,14 @@ def fractalmar_huge_in512(**kwargs):
         fractal_level=0,
         **kwargs)
     return model
+
+def fractalmar_huge_in512(**kwargs):
+    model = FractalGen(
+        img_size_list=(512, 64, 8, 1),
+        embed_dim_list=(1024, 512, 256, 64),
+        num_blocks_list=(32, 8, 4, 1),
+        num_heads_list=(16, 8, 4, 4),
+        generator_type_list=("mar", "mar", "mar", "ar"),
+        fractal_level=0,
+        **kwargs)
+    return model
