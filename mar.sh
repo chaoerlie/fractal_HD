@@ -3,21 +3,22 @@
 IMAGENET_PATH="data/imagenet64_new"
 
 # 训练输出目录
-OUTPUT_DIR="train/output/imagenet_val"\
+OUTPUT_DIR="train/output/mar"\
 
-export CUDA_VISIBLE_DEVICES=1  # 或者 1，视你要用哪张 GPU 而定
 
-torchrun --nproc_per_node=1 --nnodes=1 --node_rank=0 \
---master_addr=127.0.0.1 --master_port=29522 \
+
+export CUDA_VISIBLE_DEVICES=0,1  # 或者 1，视你要用哪张 GPU 而定
+
+torchrun --nproc_per_node=2 --nnodes=1 --node_rank=0 \
+--master_addr=127.0.0.1 --master_port=29540 \
 main_fractalgen.py \
-  --model fractalar_in64 --img_size 64 --num_conds 1 \
+  --model fractalmar_in64 --img_size 64 --num_conds 5 \
   --batch_size 32 --eval_freq 40 --save_last_freq 10 \
-  --epochs 1600 --warmup_epochs 40 --class_num 2 \
+  --epochs 800 --warmup_epochs 40 --class_num 2 \
   --blr 5.0e-5 --weight_decay 0.05 --attn_dropout 0.1 --proj_dropout 0.1 \
   --lr_schedule cosine --gen_bsz 16 --num_images 64 \
-  --num_iter_list 64,16  --cfg_schedule linear --temperature 1.03 \
+  --num_iter_list 64,16 --cfg 6.5 --cfg_schedule linear --temperature 1.02 \
   --output_dir ${OUTPUT_DIR} \
   --resume ${OUTPUT_DIR} \
   --data_path ${IMAGENET_PATH} --grad_checkpointing --online_eval \
-  --label_drop_prob 0 --cfg 3.0
   # --evaluate_gen \

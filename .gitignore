@@ -1,39 +1,90 @@
-# 忽略日志文件
-*.log
+# =============================================================================
+# Generated / Personal Data
+# =============================================================================
 
-# 忽略数据集目录
-/data/
-/train/
-
-# Python 缓存与构建
-__pycache__/
-*.py[cod]
-*.so
-
-# Jupyter
-.ipynb_checkpoints/
-
-# IDE 配置
-.vscode/
-.idea/
-
-# 模型权重和中间结果
+# Large checkpoint & model weights
 *.pth
 *.pt
 *.ckpt
 checkpoints/
+
+# Datasets
+/data/
+/train/
+
+# Training outputs & results
+/result/
+/temp/
 output_dir/
 samples/
-generated/
+
+# Logs
+*.log
+nohup.out
+
+# Generated analysis files
+*.csv
+*.xlsx
 *.png
 *.jpg
 *.jpeg
 
-# 训练记录
-runs/
-events.out.tfevents.*
+# Paper PDF (large)
+CRC1.pdf
 
-# 环境文件
+# Personal scripts
+checksize.py
+
+# Jupyter notebook checkpoints
+*.ipynb
+.ipynb_checkpoints/
+
+# Test archive
+/test/
+
+# ResNet training logs
+resnet/logs/
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# =============================================================================
+# IDE / Editor
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# Environment
+# =============================================================================
 .env
 .venv/
 env/
+venv/
+
+# =============================================================================
+# TensorBoard
+# =============================================================================
+runs/
+events.out.tfevents.*
+
+# =============================================================================
+# Generated images from evaluation
+# =============================================================================
+ariter*/
+generated/
+
+# macOS
+.DS_Store
